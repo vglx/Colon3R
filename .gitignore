@@ -1,0 +1,9 @@
+checkpoints/*.pt
+outputs/
+cache/
+__pycache__/
+*.py[cod]
+*.so
+data/
+third_party/VGGT/
+third_party/Wat3R/
