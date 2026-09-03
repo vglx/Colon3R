@@ -259,6 +259,14 @@ def _sidecar_expected_hash(source: Path) -> str:
 def _verified_load_hash(source: Path, expected_sha256: str | None) -> str:
     if expected_sha256 is not None:
         return _verify_hash(source, expected_sha256)
+    if _sidecar_path(source).exists():
+        expected = _sidecar_expected_hash(source)
+        observed = file_sha256(source)
+        if observed != expected:
+            raise ValueError(
+                f"checkpoint SHA-256 sidecar mismatch: expected {expected}, observed {observed}"
+            )
+        return observed
     if source.name == "colon3r_10k.pt":
         return _verify_hash(source, COLON3R_FINAL_SHA256)
     expected = _sidecar_expected_hash(source)
