@@ -16,11 +16,11 @@ Colon3R/
   colon3r/
 ```
 
-VGGT and Wat3R are external dependencies. Their source is not vendored or modified here.
+VGGT is the only external model source dependency. The geometry, supervision, reliability, and adaptation code used by Colon3R is included in the `colon3r` package.
 
 ## Environment
 
-The verified environment used Python 3.11, PyTorch 2.2.2, torchvision 0.17.2, CUDA 11.8, NumPy 1.26.4, Pillow 10.3.0, PyYAML 6.0.1, and Kornia 0.7.2. Training requires two CUDA GPUs with bf16 support. Inference requires one CUDA GPU.
+The verified environment used Python 3.11, PyTorch 2.2.2, torchvision 0.17.2, CUDA 11.8, NumPy 1.26.4, Pillow 10.3.0, PyYAML 6.0.1, and Kornia 0.7.2. Training and inference require at least one CUDA GPU with bf16 support. Additional GPUs can be selected at launch time.
 
 ```bash
 conda create -n colon3r python=3.11 -y
@@ -29,12 +29,10 @@ pip install -r requirements.txt
 
 mkdir -p third_party
 git clone https://github.com/facebookresearch/vggt.git third_party/VGGT
-git clone https://github.com/LSXI7/Wat3R.git third_party/Wat3R
 pip install -e third_party/VGGT
-pip install -e third_party/Wat3R --no-deps
 ```
 
-The extracted implementation was validated against Wat3R commit `93147df00e15605afa93f586923fec000b18cefc`. The public config also accepts another compatible official checkout through `paths.wat3r_root`. Set `VGGT_ROOT` or update `paths.vggt_root` when VGGT is not under `third_party/VGGT`.
+No Wat3R checkout or installation is required. Set `VGGT_ROOT` or update `paths.vggt_root` when VGGT is not under `third_party/VGGT`. Third-party attribution for locally maintained utility behavior is recorded in `NOTICE`.
 
 VGGT base weights are loaded through `VGGT.from_pretrained("facebook/VGGT-1B")`; make that Hugging Face artifact available in the local cache for offline execution.
 
@@ -94,7 +92,7 @@ Update the portable paths in `configs/colon3r.yaml`, or override the source and 
 
 The fixed protocol is:
 
-- two NCCL workers;
+- one or more user-selected CUDA workers, with NCCL gradient averaging for multi-GPU runs;
 - three labeled source microbatches and one unlabeled target microbatch per update;
 - eight Teacher views, eight Student views, and 56 directed pairs;
 - rank-16, alpha-16, zero-dropout Q/V/O LoRA in global blocks 12–23;
@@ -106,19 +104,28 @@ The fixed protocol is:
 - support threshold `0.20138970316367508`, scale threshold `0.004409444387420081`, and depth-anchor weight `0.05`;
 - 6000 adaptation updates from global step 4000 to 10000.
 
-Start a new run in a new output directory:
+GPU count is selected by the launch command, not by the scientific YAML configuration. For one GPU:
 
 ```bash
-torchrun --standalone --nproc_per_node=2 train.py \
+CUDA_VISIBLE_DEVICES=0 python train.py \
   --config configs/colon3r.yaml \
   --output outputs/colon3r_run \
   --c3vd-fov-mask data/source/calibration/c3vd_fov_mask.png
 ```
 
-Resume without changing the protocol:
+For multiple GPUs, expose the desired devices and use the same number of local workers. For example, with two GPUs:
 
 ```bash
-torchrun --standalone --nproc_per_node=2 train.py \
+CUDA_VISIBLE_DEVICES=0,1 torchrun --standalone --nproc_per_node=2 train.py \
+  --config configs/colon3r.yaml \
+  --output outputs/colon3r_run \
+  --c3vd-fov-mask data/source/calibration/c3vd_fov_mask.png
+```
+
+The released 10k checkpoint was produced with two workers. Changing the worker count changes the effective global batch and therefore will not reproduce the exact optimization trajectory. Resume with the same worker count used to create the checkpoint:
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1 torchrun --standalone --nproc_per_node=2 train.py \
   --config configs/colon3r.yaml \
   --output outputs/colon3r_run \
   --resume outputs/colon3r_run/checkpoints/colon3r_global_005000.pt \

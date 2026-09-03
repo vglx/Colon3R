@@ -1,6 +1,5 @@
 paths:
   vggt_root: third_party/VGGT
-  wat3r_root: third_party/Wat3R
   source_train_manifest: data/source/train_mixed_stage1.jsonl
   target_train_manifest: data/target/train.jsonl
   c3vd_calibration: data/source/calibration/cfhq190l_omnidirectional_calibration.json

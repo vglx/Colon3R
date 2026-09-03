@@ -22,7 +22,7 @@ from .checkpoint import (
     save_training_checkpoint,
 )
 from .data import SourceManifestDataset, TargetManifestDataset
-from .geometry import load_wat3r_bindings, predicted_pinhole_cross_view_geometry
+from .geometry import load_geometry_bindings, predicted_pinhole_cross_view_geometry
 from .losses import (
     depth_scale_anchor_loss,
     source_multitask_loss,
@@ -95,15 +95,24 @@ def load_config(path: str | Path) -> dict[str, Any]:
 
 
 def _initialize_distributed() -> tuple[int, int, int, torch.device]:
-    if not dist.is_initialized():
-        if "RANK" not in os.environ or "WORLD_SIZE" not in os.environ:
-            raise RuntimeError("launch training with torchrun --nproc_per_node=2")
-        dist.init_process_group(backend="nccl")
-    rank = dist.get_rank()
-    world_size = dist.get_world_size()
-    local_rank = int(os.environ["LOCAL_RANK"])
-    if world_size != 2 or dist.get_backend() != "nccl":
-        raise RuntimeError("Colon3R training requires exactly two NCCL workers")
+    if not torch.cuda.is_available() or torch.cuda.device_count() < 1:
+        raise RuntimeError("Colon3R training requires at least one CUDA GPU")
+    distributed_variables = {"RANK", "WORLD_SIZE", "LOCAL_RANK"}
+    configured = distributed_variables.intersection(os.environ)
+    if configured and configured != distributed_variables:
+        raise RuntimeError("RANK, WORLD_SIZE, and LOCAL_RANK must be set together")
+    if not configured:
+        rank, world_size, local_rank = 0, 1, 0
+    else:
+        if not dist.is_initialized():
+            dist.init_process_group(backend="nccl")
+        rank = dist.get_rank()
+        world_size = dist.get_world_size()
+        local_rank = int(os.environ["LOCAL_RANK"])
+        if dist.get_backend() != "nccl":
+            raise RuntimeError("distributed Colon3R training requires NCCL")
+    if not 0 <= local_rank < torch.cuda.device_count():
+        raise RuntimeError(f"local rank {local_rank} has no visible CUDA device")
     torch.cuda.set_device(local_rank)
     return rank, world_size, local_rank, torch.device("cuda", local_rank)
 
@@ -386,7 +395,7 @@ class Colon3RTrainer:
         if not 1 <= self.total_updates <= 6000:
             raise ValueError("total updates must be in [1,6000]")
         paths = self.config["paths"]
-        self.bindings = load_wat3r_bindings(paths["wat3r_root"])
+        self.bindings = load_geometry_bindings()
         self.source_data = SourceManifestDataset(
             Path(paths["source_train_manifest"]),
             c3vd_calibration=Path(paths["c3vd_calibration"]),

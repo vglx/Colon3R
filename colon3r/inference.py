@@ -14,7 +14,7 @@ from torch import nn
 
 from .checkpoint import COLON3R_FINAL_SHA256, load_colon3r_checkpoint
 from .data import preprocess_eight_frames
-from .geometry import load_wat3r_bindings
+from .geometry import load_geometry_bindings
 from .model import build_student
 from .training import load_config
 
@@ -264,7 +264,7 @@ def run_inference(
     model.eval().requires_grad_(False)
     with torch.autocast("cuda", dtype=torch.bfloat16):
         prediction = one_forward(model, images)
-    bindings = load_wat3r_bindings(config["paths"]["wat3r_root"])
+    bindings = load_geometry_bindings()
     arrays = decode_prediction(
         prediction,
         tuple(int(value) for value in images.shape[-2:]),

@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import importlib
-import sys
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
 import torch
 import torch.nn.functional as F
+
+from .supervision import MultitaskLoss
 
 
 def _homogeneous(matrix: np.ndarray) -> np.ndarray:
@@ -105,62 +104,272 @@ def directed_pairs(view_count: int = 8) -> tuple[tuple[int, int], ...]:
     return tuple((source, target) for source in range(8) for target in range(8) if source != target)
 
 
+def _quaternion_to_matrix(quaternion: torch.Tensor) -> torch.Tensor:
+    x, y, z, w = torch.unbind(quaternion, -1)
+    scale = 2 / quaternion.square().sum(-1)
+    values = torch.stack(
+        (
+            1 - scale * (y.square() + z.square()),
+            scale * (x * y - z * w),
+            scale * (x * z + y * w),
+            scale * (x * y + z * w),
+            1 - scale * (x.square() + z.square()),
+            scale * (y * z - x * w),
+            scale * (x * z - y * w),
+            scale * (y * z + x * w),
+            1 - scale * (x.square() + y.square()),
+        ),
+        dim=-1,
+    )
+    return values.reshape(quaternion.shape[:-1] + (3, 3))
+
+
+def pose_encoding_to_extri_fov(
+    pose_encoding: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    if pose_encoding.shape[-1] != 9:
+        raise ValueError("pose encoding must end in nine values")
+    translation = pose_encoding[..., :3]
+    rotation = _quaternion_to_matrix(pose_encoding[..., 3:7])
+    return (
+        torch.cat((rotation, translation[..., None]), dim=-1),
+        pose_encoding[..., 7],
+        pose_encoding[..., 8],
+    )
+
+
+def pose_fov_to_intri(
+    fov_h: torch.Tensor,
+    fov_w: torch.Tensor,
+    image_size_hw: tuple[int, int],
+) -> torch.Tensor:
+    height, width = image_size_hw
+    fy = (height / 2) / torch.tan(fov_h / 2)
+    fx = (width / 2) / torch.tan(fov_w / 2)
+    intrinsics = torch.zeros(
+        fov_h.shape + (3, 3), dtype=fov_h.dtype, device=fov_h.device
+    )
+    intrinsics[..., 0, 0] = fx
+    intrinsics[..., 1, 1] = fy
+    intrinsics[..., 0, 2] = width / 2
+    intrinsics[..., 1, 2] = height / 2
+    intrinsics[..., 2, 2] = 1
+    return intrinsics
+
+
+def _inverse_se3(transform: torch.Tensor) -> torch.Tensor:
+    if transform.shape[-2:] not in {(3, 4), (4, 4)}:
+        raise ValueError("SE3 matrices must end in 3x4 or 4x4")
+    rotation = transform[..., :3, :3]
+    translation = transform[..., :3, 3:]
+    inverse = torch.zeros(
+        transform.shape[:-2] + (4, 4), dtype=transform.dtype, device=transform.device
+    )
+    inverse[..., :3, :3] = rotation.transpose(-1, -2)
+    inverse[..., :3, 3:] = -rotation.transpose(-1, -2) @ translation
+    inverse[..., 3, 3] = 1
+    return inverse
+
+
+def unproject_depth(
+    depth_map: torch.Tensor | np.ndarray,
+    extrinsics: torch.Tensor | np.ndarray,
+    intrinsics: torch.Tensor | np.ndarray,
+    epsilon: float = 1e-8,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    depth = torch.as_tensor(depth_map).float()
+    poses = torch.as_tensor(extrinsics, device=depth.device).float()
+    calibration = torch.as_tensor(intrinsics, device=depth.device).float()
+    if depth.ndim == 5 and depth.shape[-1] == 1:
+        depth = depth[..., 0]
+    if depth.ndim != 4:
+        raise ValueError("depth must have shape [B,V,H,W]")
+    batch, views, height, width = depth.shape
+    if poses.shape != (batch, views, 3, 4):
+        raise ValueError("extrinsics must have shape [B,V,3,4]")
+    if calibration.shape != (batch, views, 3, 3):
+        raise ValueError("intrinsics must have shape [B,V,3,3]")
+    y, x = torch.meshgrid(
+        torch.arange(height, dtype=depth.dtype, device=depth.device),
+        torch.arange(width, dtype=depth.dtype, device=depth.device),
+        indexing="ij",
+    )
+    fx = calibration[..., 0, 0, None, None]
+    fy = calibration[..., 1, 1, None, None]
+    cx = calibration[..., 0, 2, None, None]
+    cy = calibration[..., 1, 2, None, None]
+    camera = torch.stack(
+        ((x - cx) * depth / fx, (y - cy) * depth / fy, depth), dim=-1
+    )
+    camera_to_world = _inverse_se3(poses.reshape(batch * views, 3, 4))
+    rotation = camera_to_world[:, :3, :3].reshape(batch, views, 3, 3)
+    translation = camera_to_world[:, :3, 3].reshape(batch, views, 3)
+    world = camera.reshape(batch, views, height * width, 3) @ rotation.transpose(-1, -2)
+    world = (world + translation.unsqueeze(2)).reshape(batch, views, height, width, 3)
+    return world, camera, depth > epsilon
+
+
+def normalize_labels(
+    extrinsics: torch.Tensor,
+    cam_points: torch.Tensor | None = None,
+    world_points: torch.Tensor | None = None,
+    depths: torch.Tensor | None = None,
+    scale_by_points: bool = True,
+    point_masks: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None, torch.Tensor | None]:
+    if extrinsics.ndim != 4 or extrinsics.shape[-2:] != (3, 4):
+        raise ValueError("extrinsics must have shape [B,V,3,4]")
+    if not torch.isfinite(extrinsics).all():
+        raise ValueError("extrinsics must be finite")
+    batch, views = extrinsics.shape[:2]
+    homogeneous = torch.zeros(
+        (batch, views, 4, 4), dtype=extrinsics.dtype, device=extrinsics.device
+    )
+    homogeneous[..., :3, :] = extrinsics
+    homogeneous[..., 3, 3] = 1
+    normalized_extrinsics = homogeneous @ _inverse_se3(homogeneous[:, 0]).unsqueeze(1)
+    normalized_world = None
+    if world_points is not None:
+        rotation = extrinsics[:, 0, :3, :3]
+        translation = extrinsics[:, 0, :3, 3]
+        normalized_world = world_points @ rotation.transpose(-1, -2)[:, None, None]
+        normalized_world = normalized_world + translation[:, None, None, None]
+    if not scale_by_points:
+        return normalized_extrinsics[..., :3, :], cam_points, normalized_world, depths
+    if normalized_world is None or point_masks is None:
+        raise ValueError("scale normalization requires world points and point masks")
+    distance = normalized_world.norm(dim=-1)
+    scale = (distance * point_masks).sum(dim=(1, 2, 3))
+    scale = (scale / (point_masks.sum(dim=(1, 2, 3)) + 1e-3)).clamp(1e-6, 1e6)
+    normalized_world = normalized_world / scale[:, None, None, None, None]
+    normalized_extrinsics[..., :3, 3] /= scale[:, None, None]
+    normalized_depths = None if depths is None else depths / scale[:, None, None, None]
+    normalized_camera = None if cam_points is None else cam_points / scale[:, None, None, None, None]
+    values = (normalized_extrinsics[..., :3, :], normalized_camera, normalized_world, normalized_depths)
+    if any(value is not None and not torch.isfinite(value).all() for value in values):
+        raise FloatingPointError("normalized geometry contains non-finite values")
+    return values
+
+
+def _project_points(
+    world_points: torch.Tensor,
+    extrinsics: torch.Tensor,
+    intrinsics: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    homogeneous = torch.cat((world_points, torch.ones_like(world_points[..., :1])), dim=-1)
+    camera = torch.bmm(extrinsics, homogeneous.t().unsqueeze(0).expand(len(extrinsics), -1, -1))
+    pixel_h = torch.bmm(intrinsics, camera)
+    pixels = (pixel_h[:, :2] / pixel_h[:, 2:3]).transpose(1, 2)
+    return pixels, camera
+
+
+def _static_frame_mask(
+    extrinsics: torch.Tensor,
+    intrinsics: torch.Tensor,
+    world_points: torch.Tensor,
+    depths: torch.Tensor,
+    candidate: torch.Tensor,
+    query_index: int,
+    minimum_views: int,
+    relative_threshold: float,
+    boundary: int,
+) -> torch.Tensor:
+    views, height, width = world_points.shape[:3]
+    result = torch.zeros((height, width), dtype=torch.bool, device=world_points.device)
+    if not candidate.any():
+        return result
+    query = world_points[query_index][candidate]
+    rows, columns = torch.nonzero(candidate, as_tuple=True)
+    pixels, camera = _project_points(query, extrinsics, intrinsics)
+    projected_depth = camera[:, 2]
+    floor_pixels = pixels.floor().long()
+    inside = (
+        (floor_pixels[..., 0] >= boundary)
+        & (floor_pixels[..., 0] < width - boundary)
+        & (floor_pixels[..., 1] >= boundary)
+        & (floor_pixels[..., 1] < height - boundary)
+        & torch.isfinite(projected_depth)
+        & (projected_depth > 0)
+    )
+    safe = floor_pixels.clone()
+    safe[~inside] = 0
+    frame_indices = torch.arange(views, device=depths.device)[:, None].expand(-1, safe.shape[1])
+    consistent = torch.zeros_like(inside)
+    for offset_x, offset_y in ((0, 0), (1, 0), (0, 1), (1, 1)):
+        sample = safe + torch.tensor((offset_x, offset_y), device=safe.device)
+        sampled_depth = depths[frame_indices, sample[..., 1], sample[..., 0]]
+        difference = (projected_depth - sampled_depth).abs()
+        consistent |= (
+            torch.isfinite(sampled_depth)
+            & (sampled_depth > 0)
+            & (difference < projected_depth * relative_threshold)
+            & (difference < sampled_depth * relative_threshold)
+        )
+    selected = (inside & consistent).sum(0) >= minimum_views
+    result[rows[selected], columns[selected]] = True
+    return result
+
+
+@torch.no_grad()
+def build_static_masks(
+    depth: torch.Tensor,
+    extrinsics: torch.Tensor,
+    intrinsics: torch.Tensor,
+    candidate_masks: torch.Tensor | None = None,
+    visibility_tolerance: int = 2,
+    relative_depth_threshold: float = 0.05,
+    boundary: int = 4,
+) -> torch.Tensor:
+    if depth.ndim == 5 and depth.shape[-1] == 1:
+        depth = depth[..., 0]
+    if depth.ndim != 4 or depth.shape[1] < 2:
+        raise ValueError("static support requires at least two depth frames")
+    if visibility_tolerance < 0:
+        raise ValueError("visibility tolerance must be nonnegative")
+    world, _, valid_depth = unproject_depth(depth, extrinsics, intrinsics)
+    candidates = valid_depth if candidate_masks is None else candidate_masks.bool() & valid_depth
+    if candidates.shape != depth.shape:
+        raise ValueError("candidate masks must match depth")
+    minimum = min(depth.shape[1], max(2, depth.shape[1] - visibility_tolerance))
+    output = torch.zeros_like(depth, dtype=torch.bool)
+    for batch_index in range(depth.shape[0]):
+        for query_index in range(depth.shape[1]):
+            output[batch_index, query_index] = _static_frame_mask(
+                extrinsics[batch_index],
+                intrinsics[batch_index],
+                world[batch_index],
+                depth[batch_index],
+                candidates[batch_index, query_index],
+                query_index,
+                minimum,
+                relative_depth_threshold,
+                boundary,
+            )
+    return output
+
+
 @dataclass(frozen=True)
-class Wat3RBindings:
-    root: Path
+class GeometryBindings:
     MultitaskLoss: type[Any]
     build_static_masks: Callable[..., Any]
-    project_teacher_depth_to_student_views: Callable[..., Any]
     normalize_labels: Callable[..., Any]
     unproject_depth: Callable[..., Any]
     pose_encoding_to_extri_fov: Callable[..., Any]
     pose_fov_to_intri: Callable[..., Any]
 
 
-def _configured_module(root: Path, name: str) -> Any:
-    try:
-        module = importlib.import_module(name)
-    except Exception as error:
-        raise ImportError(f"failed to import Wat3R module {name} from configured root {root}") from error
-    module_path = Path(getattr(module, "__file__", "")).resolve()
-    if root not in module_path.parents:
-        raise ImportError(f"Wat3R module {name} resolved outside configured root {root}: {module_path}")
-    return module
+def load_geometry_bindings() -> GeometryBindings:
+    return GeometryBindings(
+        MultitaskLoss,
+        build_static_masks,
+        normalize_labels,
+        unproject_depth,
+        pose_encoding_to_extri_fov,
+        pose_fov_to_intri,
+    )
 
 
-def load_wat3r_bindings(wat3r_root: str | Path) -> Wat3RBindings:
-    root = Path(wat3r_root).expanduser().resolve()
-    if not root.is_dir():
-        raise FileNotFoundError(f"Wat3R root does not exist: {root}; set config.paths.wat3r_root")
-    required = (root / "training" / "loss.py", root / "training" / "losses" / "static_geo_loss.py", root / "training" / "train_utils" / "normalization.py", root / "wat3r" / "utils" / "static_mask.py", root / "wat3r" / "utils" / "geometry.py", root / "wat3r" / "utils" / "pose_enc.py")
-    if not all(path.is_file() for path in required):
-        raise FileNotFoundError(f"Wat3R root is missing required geometry modules: {root}; set config.paths.wat3r_root")
-    root_text = str(root)
-    if root_text not in sys.path:
-        sys.path.insert(0, root_text)
-    importlib.invalidate_caches()
-    loss = _configured_module(root, "training.loss")
-    static_loss = _configured_module(root, "training.losses.static_geo_loss")
-    normalization = _configured_module(root, "training.train_utils.normalization")
-    static_mask = _configured_module(root, "wat3r.utils.static_mask")
-    geometry = _configured_module(root, "wat3r.utils.geometry")
-    pose_enc = _configured_module(root, "wat3r.utils.pose_enc")
-    required_symbols = {
-        "MultitaskLoss": getattr(loss, "MultitaskLoss", None),
-        "project_teacher_depth_to_student_views": getattr(static_loss, "_project_teacher_depth_to_student_views", None),
-        "normalize_labels": getattr(normalization, "normalize_camera_extrinsics_and_points_batch", None),
-        "build_static_masks": getattr(static_mask, "build_static_masks", None),
-        "unproject_depth": getattr(geometry, "unproject_depth_map_to_point_map_bs", None),
-        "pose_encoding_to_extri_fov": getattr(pose_enc, "pose_encoding_to_extri_fov", None),
-        "pose_fov_to_intri": getattr(pose_enc, "pose_fov_to_intri", None),
-    }
-    missing = [name for name, value in required_symbols.items() if not callable(value)]
-    if missing:
-        raise ImportError(f"configured Wat3R root lacks required geometry symbols: {missing}")
-    return Wat3RBindings(root, required_symbols["MultitaskLoss"], required_symbols["build_static_masks"], required_symbols["project_teacher_depth_to_student_views"], required_symbols["normalize_labels"], required_symbols["unproject_depth"], required_symbols["pose_encoding_to_extri_fov"], required_symbols["pose_fov_to_intri"])
-
-
-def build_static_support(bindings: Wat3RBindings, *, depth: Any, extrinsics: Any, intrinsics: Any) -> Any:
+def build_static_support(bindings: GeometryBindings, *, depth: Any, extrinsics: Any, intrinsics: Any) -> Any:
     return bindings.build_static_masks(depth=depth, extrinsics=extrinsics, intrinsics=intrinsics).bool()
 
 

@@ -6,4 +6,3 @@ __pycache__/
 *.so
 data/
 third_party/VGGT/
-third_party/Wat3R/
