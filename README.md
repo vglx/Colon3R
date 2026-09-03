@@ -55,7 +55,7 @@ sha256sum -c SHA256SUMS
 cd ..
 ```
 
-The 10k checkpoint contains adaptation update 6000, LoRA and camera/depth/point head tensors, optimizer state, Teacher state, sampler state, and resume metadata. Its recorded inference audit has `locked_target_accessed=false`.
+The 10k checkpoint contains adaptation update 6000, LoRA and camera/depth/point head tensors, optimizer state, Teacher state, sampler state, and resume metadata.
 
 ## Data
 

@@ -522,7 +522,6 @@ class Colon3RTrainer:
                 "quasi_rigid_loss": float(quasi.detach().cpu()),
                 "anchor_loss": float(anchor.loss.detach().cpu()),
                 "camera_model": "teacher_predicted_pinhole",
-                "locked_target_accessed": False,
             },
         )
 
@@ -547,7 +546,6 @@ class Colon3RTrainer:
             if current["base"] != self.frozen_digests["base"] or current["track"] != self.frozen_digests["track"]:
                 raise RuntimeError("frozen backbone or track parameters changed")
             result["seconds"] = time.perf_counter() - started
-            result["locked_target_accessed"] = False
             self._append_metrics(result)
             checkpoint = update == 20 or update % 1000 == 0 or update == self.total_updates
             if checkpoint and self.rank == 0:
