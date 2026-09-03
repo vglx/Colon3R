@@ -205,6 +205,71 @@ def _verify_hash(path: Path, expected_sha256: str | None) -> str:
     return observed
 
 
+def _sidecar_path(path: Path) -> Path:
+    return Path(f"{path}.sha256")
+
+
+def _atomic_write_bytes(path: Path, content: bytes) -> None:
+    destination = path.expanduser().resolve()
+    if destination.exists():
+        raise FileExistsError(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=destination.parent, prefix=f".{destination.name}.", suffix=".tmp"
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(temporary, destination)
+        directory_descriptor = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_descriptor)
+        finally:
+            os.close(directory_descriptor)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _sidecar_expected_hash(source: Path) -> str:
+    sidecar = _sidecar_path(source)
+    if not sidecar.is_file():
+        raise ValueError(
+            f"checkpoint requires expected_sha256 or SHA-256 sidecar: {sidecar}"
+        )
+    try:
+        content = sidecar.read_text(encoding="ascii")
+    except (OSError, UnicodeError) as error:
+        raise ValueError(f"checkpoint SHA-256 sidecar is unreadable: {sidecar}") from error
+    if not content.endswith("\n") or content.count("\n") != 1:
+        raise ValueError(f"checkpoint SHA-256 sidecar is invalid: {sidecar}")
+    digest, separator, filename = content[:-1].partition("  ")
+    if (
+        separator != "  "
+        or filename != source.name
+        or len(digest) != 64
+        or any(character not in "0123456789abcdef" for character in digest)
+    ):
+        raise ValueError(f"checkpoint SHA-256 sidecar is invalid: {sidecar}")
+    return digest
+
+
+def _verified_load_hash(source: Path, expected_sha256: str | None) -> str:
+    if expected_sha256 is not None:
+        return _verify_hash(source, expected_sha256)
+    if source.name == "colon3r_10k.pt":
+        return _verify_hash(source, COLON3R_FINAL_SHA256)
+    expected = _sidecar_expected_hash(source)
+    observed = file_sha256(source)
+    if observed != expected:
+        raise ValueError(
+            f"checkpoint SHA-256 sidecar mismatch: expected {expected}, observed {observed}"
+        )
+    return observed
+
+
 def _head_state(model: nn.Module) -> dict[str, torch.Tensor]:
     return {
         name: value
@@ -323,6 +388,12 @@ def save_training_checkpoint(
     global_step: int,
     adaptation_update: int,
 ) -> dict[str, Any]:
+    destination = Path(path).expanduser().resolve()
+    sidecar = _sidecar_path(destination)
+    if destination.exists():
+        raise FileExistsError(destination)
+    if sidecar.exists():
+        raise FileExistsError(sidecar)
     step, update = _validate_steps(global_step, adaptation_update)
     lora_state = _clone_cpu(dict(lora_named_parameters(student)))
     head_state = _clone_cpu(_head_state(student))
@@ -349,12 +420,16 @@ def save_training_checkpoint(
             "optimizer": value_digest(optimizer_state),
         },
     }
-    destination = Path(path)
     _atomic_save(payload, destination)
-    resolved = destination.expanduser().resolve()
+    observed_hash = file_sha256(destination)
+    _atomic_write_bytes(
+        sidecar,
+        f"{observed_hash}  {destination.name}\n".encode("ascii"),
+    )
     return {
-        "path": str(resolved),
-        "sha256": file_sha256(resolved),
+        "path": str(destination),
+        "sha256": observed_hash,
+        "sha256_sidecar": str(sidecar),
         "global_step": step,
         "adaptation_update": update,
     }
@@ -455,10 +530,7 @@ def load_colon3r_checkpoint(
     source = Path(path).expanduser().resolve()
     if not source.is_file():
         raise FileNotFoundError(f"Colon3R checkpoint not found: {source}")
-    observed_hash = _verify_hash(
-        source,
-        COLON3R_FINAL_SHA256 if expected_sha256 is None else expected_sha256,
-    )
+    observed_hash = _verified_load_hash(source, expected_sha256)
     payload = _torch_load(source)
     kind = payload.get("kind") if isinstance(payload, Mapping) else None
     if kind == _TRAINING_KIND:
