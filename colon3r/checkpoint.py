@@ -81,6 +81,54 @@ def tensor_digest(values: Mapping[str, torch.Tensor]) -> str:
     return digest.hexdigest()
 
 
+def model_digest(model: nn.Module) -> str:
+    return tensor_digest(_unwrap(model).state_dict())
+
+
+def _parameter_group_digests(
+    model: nn.Module,
+    overrides: Mapping[str, torch.Tensor] | None = None,
+) -> dict[str, str]:
+    override_values = {} if overrides is None else dict(overrides)
+    lora_names = {name for name, _parameter in lora_named_parameters(model)}
+    groups: dict[str, list[tuple[str, torch.Tensor]]] = {
+        "lora": [],
+        "depth": [],
+        "point": [],
+        "camera": [],
+        "track": [],
+        "base": [],
+    }
+    for name, parameter in _unwrap(model).named_parameters():
+        if name in lora_names:
+            group = "lora"
+        elif name.startswith("depth_head."):
+            group = "depth"
+        elif name.startswith("point_head."):
+            group = "point"
+        elif name.startswith("camera_head."):
+            group = "camera"
+        elif name.startswith("track_head."):
+            group = "track"
+        else:
+            group = "base"
+        groups[group].append((name, override_values.get(name, parameter)))
+    result = {}
+    for group, values in groups.items():
+        digest = hashlib.sha256()
+        for name, value in values:
+            digest.update(name.encode("utf-8"))
+            digest.update(str(tuple(value.shape)).encode("ascii"))
+            digest.update(str(value.dtype).encode("ascii"))
+            digest.update(_tensor_bytes(value))
+        result[group] = digest.hexdigest()
+    return result
+
+
+def parameter_group_digests(model: nn.Module) -> dict[str, str]:
+    return _parameter_group_digests(model)
+
+
 def value_digest(value: Any, json_compatible: bool = False) -> str:
     if json_compatible:
         encoded = json.dumps(
@@ -163,6 +211,16 @@ def _head_state(model: nn.Module) -> dict[str, torch.Tensor]:
         for name, value in _unwrap(model).state_dict().items()
         if name.startswith(_HEAD_PREFIXES)
     }
+
+
+def _require_complete_heads(state: Mapping[str, torch.Tensor], label: str) -> None:
+    missing = [
+        prefix.removesuffix(".")
+        for prefix in _HEAD_PREFIXES
+        if not any(name.startswith(prefix) for name in state)
+    ]
+    if missing:
+        raise ValueError(f"{label} is missing required heads: {', '.join(missing)}")
 
 
 def _validate_tensor_state(
@@ -270,8 +328,7 @@ def save_training_checkpoint(
     head_state = _clone_cpu(_head_state(student))
     if not lora_state:
         raise ValueError("training checkpoint requires non-empty LoRA state")
-    if not head_state:
-        raise ValueError("training checkpoint requires camera, depth, and point heads")
+    _require_complete_heads(head_state, "training checkpoint head state")
     if not callable(getattr(teacher, "state_dict", None)):
         raise TypeError("teacher must expose state_dict()")
     teacher_state = _clone_cpu(teacher.state_dict())
@@ -398,17 +455,12 @@ def load_colon3r_checkpoint(
     source = Path(path).expanduser().resolve()
     if not source.is_file():
         raise FileNotFoundError(f"Colon3R checkpoint not found: {source}")
-    observed_hash = _verify_hash(source, expected_sha256)
+    observed_hash = _verify_hash(
+        source,
+        COLON3R_FINAL_SHA256 if expected_sha256 is None else expected_sha256,
+    )
     payload = _torch_load(source)
     kind = payload.get("kind") if isinstance(payload, Mapping) else None
-    if (
-        kind == _FORMAL_KIND
-        and expected_sha256 is None
-        and observed_hash != COLON3R_FINAL_SHA256
-    ):
-        raise ValueError(
-            f"checkpoint SHA-256 mismatch: expected {COLON3R_FINAL_SHA256}, observed {observed_hash}"
-        )
     if kind == _TRAINING_KIND:
         result = _validate_training_payload(payload)
         teacher_state = result["teacher_state"]
@@ -423,6 +475,21 @@ def load_colon3r_checkpoint(
     head_state = _validate_tensor_state(
         result["student_head_state"], _head_state(student), "head state"
     )
+    candidate_student_state = dict(_unwrap(student).state_dict())
+    candidate_student_state.update(lora_state)
+    candidate_student_state.update(head_state)
+    overrides = {**lora_state, **head_state}
+    if kind == _FORMAL_KIND:
+        if tensor_digest(candidate_student_state) != result["student_digest"]:
+            raise ValueError("formal Colon3R checkpoint student digest mismatch")
+        if tensor_digest(teacher_state) != result["teacher_digest"]:
+            raise ValueError("formal Colon3R checkpoint Teacher digest mismatch")
+        if _parameter_group_digests(student, overrides) != result["digests"][
+            "parameter_groups"
+        ]:
+            raise ValueError(
+                "formal Colon3R checkpoint parameter-group digest mismatch"
+            )
     teacher_is_controller = teacher is not None and hasattr(teacher, "teacher")
     if teacher is not None:
         if teacher_is_controller:
@@ -437,6 +504,13 @@ def load_colon3r_checkpoint(
     if optimizer is not None:
         if not isinstance(result["optimizer_state"], Mapping):
             raise ValueError("checkpoint optimizer state is missing")
+        candidate_optimizer = copy.deepcopy(optimizer)
+        try:
+            candidate_optimizer.load_state_dict(result["optimizer_state"])
+        except (TypeError, ValueError, RuntimeError) as error:
+            raise ValueError(
+                "checkpoint optimizer parameter groups are incompatible"
+            ) from error
     _apply_tensor_state(student, lora_state)
     _apply_tensor_state(student, head_state)
     if teacher is not None:
@@ -465,6 +539,8 @@ __all__ = [
     "file_sha256",
     "load_colon3r_checkpoint",
     "load_stage1_initialization",
+    "model_digest",
+    "parameter_group_digests",
     "save_training_checkpoint",
     "tensor_digest",
     "value_digest",
