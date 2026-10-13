@@ -1,6 +1,31 @@
-# Colon3R
+<h1 align="center">Colon3R: Cross-Domain 3D Reconstruction from Monocular Colonoscopic Video</h1>
 
-Colon3R adapts VGGT to colonoscopy geometry with labeled synthetic/C3VD source clips and unlabeled in-vivo target clips. The released path trains Q/V/O LoRA adapters and the camera, depth, and point heads while retaining a frozen backbone and track head. Target updates use hierarchical quasi-rigid cross-view reliability, a source-prior depth-scale anchor, and a support-and-scale-gated Teacher.
+<p align="center">
+  <a href="https://arxiv.org/abs/2609.23961"><strong>Paper (arXiv)</strong></a>
+</p>
+
+<p align="center">
+  Zhihao Xing &nbsp;&nbsp; Yingyu Wang &nbsp;&nbsp; Liang Zhao &nbsp;&nbsp; Shoudong Huang
+</p>
+
+## In-vivo Reconstruction
+
+<table>
+  <tr>
+    <th align="center">Segment 1</th>
+    <th align="center">Segment 2</th>
+  </tr>
+  <tr>
+    <td width="50%"><img src="assets/invivo/segment_1.gif" width="100%" alt="Colon3R reconstruction of in-vivo Segment 1, rotating without zoom"></td>
+    <td width="50%"><img src="assets/invivo/segment_2.gif" width="100%" alt="Colon3R reconstruction of in-vivo Segment 2, rotating without zoom"></td>
+  </tr>
+</table>
+
+Continuous rotating views of Colon3R reconstructions, without zoom effects.
+
+## Overview
+
+Colon3R adapts VGGT from labeled phantom and simulated data to unlabeled in-vivo colonoscopy. It selects cross-view supervision at sequence, directed-pair and pixel levels, while retaining source supervision and constraining target updates to preserve coupled camera, depth and pointmap geometry.
 
 ## Repository
 
@@ -10,9 +35,7 @@ Colon3R/
   inference.py
   configs/colon3r.yaml
   checkpoints/
-    stage1_4k.pt
-    colon3r_10k.pt
-    SHA256SUMS
+    colon3r.pt
   colon3r/
 ```
 
@@ -32,28 +55,15 @@ git clone https://github.com/facebookresearch/vggt.git third_party/VGGT
 pip install -e third_party/VGGT
 ```
 
-No Wat3R checkout or installation is required. Set `VGGT_ROOT` or update `paths.vggt_root` when VGGT is not under `third_party/VGGT`. Third-party attribution for locally maintained utility behavior is recorded in `NOTICE`.
+Set `VGGT_ROOT` or update `paths.vggt_root` when VGGT is not under `third_party/VGGT`.
 
 VGGT base weights are loaded through `VGGT.from_pretrained("facebook/VGGT-1B")`; make that Hugging Face artifact available in the local cache for offline execution.
 
 ## Checkpoints
 
-The release includes exact copies of the verified checkpoints:
+`colon3r.pt`
 
-| File | Step | SHA-256 |
-|---|---:|---|
-| `checkpoints/stage1_4k.pt` | 4000 | `3a6d61a3132763d1bb566cd24dafe371470b7e8e3b81d9df7cc617df1aa0e739` |
-| `checkpoints/colon3r_10k.pt` | 10000 | `7407b0681bacc6e7d7fb0c130206da0c68daa9f4306ad6017ad9a37fa9ac1cc5` |
-
-Verify them before use:
-
-```bash
-cd checkpoints
-sha256sum -c SHA256SUMS
-cd ..
-```
-
-The 10k checkpoint contains adaptation update 6000, LoRA and camera/depth/point head tensors, optimizer state, Teacher state, sampler state, and resume metadata.
+Place the checkpoint in `checkpoints/`. The download link will be added here when available.
 
 ## Data
 
@@ -128,7 +138,7 @@ The released 10k checkpoint was produced with two workers. Changing the worker c
 CUDA_VISIBLE_DEVICES=0,1 torchrun --standalone --nproc_per_node=2 train.py \
   --config configs/colon3r.yaml \
   --output outputs/colon3r_run \
-  --resume outputs/colon3r_run/checkpoints/colon3r_global_005000.pt \
+  --resume checkpoints/colon3r.pt \
   --c3vd-fov-mask data/source/calibration/c3vd_fov_mask.png
 ```
 
@@ -141,7 +151,7 @@ Pass one directory containing exactly eight RGB images, one text file containing
 ```bash
 python inference.py \
   --input examples/frames \
-  --checkpoint checkpoints/colon3r_10k.pt \
+  --checkpoint checkpoints/colon3r.pt \
   --output outputs/example \
   --export-ply
 ```
@@ -167,6 +177,6 @@ C3VD supervision uses the official Scaramuzza omnidirectional ray model with `X_
 
 The final model reflects its stated source supervision and target adaptation data. Comparisons with other systems should not be described as architecture-only comparisons when their training data or supervision differ.
 
-## Third-Party Attribution
+## Acknowledgements
 
-Colon3R depends on VGGT, introduced in “VGGT: Visual Geometry Grounded Transformer” (CVPR 2025), and on the Wat3R training geometry from “Wat3R: Underwater 3D Geometry Learning without Annotations” (ECCV 2026). Review and comply with the licenses in the respective official repositories before redistribution.
+We thank the authors of [VGGT](https://github.com/facebookresearch/vggt) for their open-source implementation.

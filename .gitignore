@@ -1,8 +1,0 @@
-checkpoints/*.pt
-outputs/
-cache/
-__pycache__/
-*.py[cod]
-*.so
-data/
-third_party/VGGT/

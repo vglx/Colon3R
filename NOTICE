@@ -1,9 +1,0 @@
-Colon3R
-
-The local camera, normalization, static-support, and supervised-loss utilities
-include behavior derived from the Apache-2.0-licensed Wat3R project:
-https://github.com/LSXI7/Wat3R
-
-Wat3R itself includes portions derived from Meta Platforms VGGT and PyTorch3D.
-The applicable copyright and attribution notices remain with their respective
-owners. Wat3R is not a runtime dependency of this distribution.
