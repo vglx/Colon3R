@@ -10,20 +10,19 @@
 
 ## In-vivo Reconstruction
 
-<table>
-  <tr>
-    <th align="center">Segment 1</th>
-    <th align="center">Segment 2</th>
-  </tr>
-  <tr>
-    <td width="50%"><img src="assets/invivo/segment_1.gif" width="100%" alt="Colon3R reconstruction of in-vivo Segment 1, rotating without zoom"></td>
-    <td width="50%"><img src="assets/invivo/segment_2.gif" width="100%" alt="Colon3R reconstruction of in-vivo Segment 2, rotating without zoom"></td>
-  </tr>
-</table>
+<p align="center">
+  <img src="assets/invivo/segment_1.gif" width="48%" alt="Segment 1: Colon3R reconstruction, rotating without zoom">
+  <img src="assets/invivo/segment_2.gif" width="48%" alt="Segment 2: Colon3R reconstruction, rotating without zoom">
+</p>
 
-Continuous rotating views of Colon3R reconstructions, without zoom effects.
+<p align="center"><strong>Segment 1 (left) &nbsp;&nbsp; · &nbsp;&nbsp; Segment 2 (right)</strong></p>
+
 
 ## Overview
+
+<p align="center">
+  <img src="assets/pipeline.png" width="100%" alt="Colon3R pipeline: source-supervised geometry, reliability-aware target adaptation, and source geometry preservation">
+</p>
 
 Colon3R adapts VGGT from labeled phantom and simulated data to unlabeled in-vivo colonoscopy. It selects cross-view supervision at sequence, directed-pair and pixel levels, while retaining source supervision and constraining target updates to preserve coupled camera, depth and pointmap geometry.
 
