@@ -1,7 +1,9 @@
 <h1 align="center">Colon3R: Cross-Domain 3D Reconstruction from Monocular Colonoscopic Video</h1>
 
 <p align="center">
-  <a href="https://arxiv.org/abs/2609.23961"><strong>Paper (arXiv)</strong></a>
+  <a href="https://arxiv.org/abs/2609.23961"><strong>Paper</strong></a>
+  &nbsp;|&nbsp;
+  <a href="https://vglx.github.io/Colon3R/"><strong>Project Page</strong></a>
 </p>
 
 <p align="center">
@@ -65,9 +67,9 @@ VGGT base weights are loaded through `VGGT.from_pretrained("facebook/VGGT-1B")`;
 
 ## Checkpoints
 
-`colon3r.pt`
+[colon3r.pt](https://studentutsedu-my.sharepoint.com/:u:/g/personal/zhihao_xing_student_uts_edu_au/IQD5OyBnv0gETaZLqk3AusbDAYLPUBSOfLkCfxq3mkW78uc?e=EQSffN)
 
-Place the checkpoint in `checkpoints/`. The download link will be added here when available.
+Place the downloaded checkpoint in `checkpoints/`.
 
 ## Data
 
