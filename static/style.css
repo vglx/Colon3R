@@ -1,1 +1,40 @@
 *{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}body{margin:0;background:#fff;color:#24313b;font-family:Arial,Helvetica,sans-serif;line-height:1.65}a{color:#29627b;text-underline-offset:4px}a:hover{color:#163e51}a:focus-visible{outline:3px solid #bd733e;outline-offset:5px}main,footer{max-width:1080px;margin:auto;padding:0 32px}.hero{max-width:1100px;margin:auto;padding:68px 32px 44px;text-align:center}h1{font-size:clamp(27px,3.5vw,42px);line-height:1.22;letter-spacing:-1px;font-weight:600;margin:0 0 24px}h1 span{display:block;color:#29627b;font-size:1.45em;font-weight:750;margin-bottom:14px;letter-spacing:-2px}.paper{display:inline-block;background:#263d49;color:white;text-decoration:none;padding:10px 22px;border-radius:5px;font-weight:600}.paper:hover{background:#365969;color:#fff}.authors{font-size:18px;margin:24px 0 12px}.authors span{margin:0 12px;color:#a5afb6}nav{display:flex;justify-content:center;gap:28px;font-size:15px}section{padding:34px 0;border-top:1px solid #dfe5e9}h2{font-size:26px;line-height:1.3;margin:0 0 18px;letter-spacing:-.4px}.section-heading{display:flex;align-items:baseline;justify-content:space-between;gap:20px}.section-heading p,.muted,.caption{color:#687782}.section-heading p{font-size:14px;margin-top:0}.results{display:grid;grid-template-columns:1fr 1fr;border:1px solid #dfe5e9;background:white}.results figure{margin:0;padding:14px 10px 8px;min-width:0}.results figure+figure{border-left:1px solid #dfe5e9}.results figcaption{text-align:center;font-size:16px;font-weight:600;margin-bottom:10px}img{max-width:100%;height:auto;display:block}.results img{width:100%}.caption{font-size:13px;margin:12px 0 0}.lead{font-size:18px;line-height:1.8;margin-bottom:28px}.pipeline{margin:0}.pipeline figcaption{text-align:center;font-size:14px;color:#687782;margin-top:12px}.checkpoint p{margin-bottom:0}.checkpoint code{margin-right:16px}pre{background:#f5f7f8;border:1px solid #e2e7ea;border-radius:4px;padding:22px;overflow-x:auto;font-size:13px;line-height:1.7}footer{border-top:1px solid #dfe5e9;padding-top:26px;padding-bottom:38px;color:#687782;font-size:13px}footer p{margin:4px 0}@media(max-width:640px){.hero{padding:40px 20px 32px}main,footer{padding-left:20px;padding-right:20px}.wide{display:none}.authors{font-size:15px}.authors span{margin:0 5px}.section-heading{display:block}.results{grid-template-columns:1fr}.results figure+figure{border-left:0;border-top:1px solid #dfe5e9}.lead{font-size:16px}section{padding:28px 0}h2{font-size:23px}pre{padding:14px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+
+/* Publication header and abstract, inspired by academic project pages. */
+.hero{max-width:1040px;padding:58px 28px 42px}
+.hero h1{font-size:clamp(30px,4.2vw,48px);font-weight:650;line-height:1.16;letter-spacing:-1.2px;color:#363636;margin:0 auto 26px;max-width:980px}
+.hero .authors{font-size:20px;line-height:1.8;color:#3273b8;margin:0 0 20px}
+.publication-links{gap:10px;flex-wrap:wrap}
+.publication-links a{display:inline-block;color:#fff;background:#363636;border-radius:28px;padding:9px 24px;text-decoration:none;font-size:16px;line-height:1.5}
+.publication-links a:hover{background:#505050}
+#overview{border-top:0;padding-top:18px;padding-bottom:42px}
+#overview h2{text-align:center;font-size:32px;font-weight:600;margin-bottom:28px;color:#363636}
+#overview .pipeline{margin:0 auto 28px}
+#overview .lead{max-width:900px;margin:0 auto;font-size:17px;line-height:1.8;text-align:justify;color:#4a4a4a}
+@media(max-width:640px){.hero{padding:38px 20px 26px}.hero .authors{font-size:17px}.hero h1{letter-spacing:-.6px}#overview .lead{text-align:left;font-size:16px}#overview h2{font-size:28px}}
+
+/* GIF comparisons in presentation order. */
+.ppt-section h2{font-size:25px}.comparison-note{font-size:17px;line-height:1.75;margin:0 0 24px}.comparison-layout{display:flex;gap:20px;align-items:center}.gif-grid{display:grid;gap:24px 14px;flex:1;min-width:0}.gif-grid.methods{grid-template-columns:repeat(3,minmax(0,1fr))}.gif-grid.pair{grid-template-columns:repeat(2,minmax(0,1fr))}.gif-grid.single{grid-template-columns:minmax(0,650px);justify-content:center}.gif-grid figure{margin:0;min-width:0;background:#fff}.gif-grid figcaption{text-align:center;font-weight:600;min-height:28px;margin-bottom:10px}.gif-grid img{width:100%;height:auto;aspect-ratio:1.2;object-fit:contain;background:white}.gif-grid.single img{aspect-ratio:4/3}.error-legend{margin:0;flex:0 0 65px;text-align:center;font-size:12px}.error-legend img{max-height:280px;width:auto;margin:auto}.error-legend figcaption{margin-top:8px}@media(max-width:700px){.gif-grid.methods{grid-template-columns:repeat(2,minmax(0,1fr))}.ppt-section h2{font-size:22px}.comparison-layout{gap:10px}.error-legend{flex-basis:45px}}@media(max-width:450px){.gif-grid.pair{grid-template-columns:1fr}.gif-grid.methods{gap:18px 8px}.gif-grid figcaption{font-size:13px}}
+
+/* Balanced RGB inputs and centered five-method comparisons. */
+.gif-grid.pair .rgb-sequence img{width:78%;margin-inline:auto}
+.gif-grid.single{grid-template-columns:minmax(0,420px)}
+.gif-grid.methods.five-methods{grid-template-columns:repeat(6,minmax(0,1fr))}
+.five-methods>figure{grid-column:span 2}
+.five-methods>figure:nth-child(4){grid-column:2 / span 2}
+.five-methods>figure:nth-child(5){grid-column:4 / span 2}
+@media(max-width:700px){
+ .gif-grid.methods.five-methods{grid-template-columns:repeat(4,minmax(0,1fr))}
+ .five-methods>figure:nth-child(4){grid-column:span 2}
+ .five-methods>figure:nth-child(5){grid-column:2 / span 2}
+}
+
+/* Full abstract and wider C3VD comparison panels. */
+#abstract{border-top:0;padding-top:18px}
+#abstract h2{text-align:center;font-size:32px;color:#363636;margin-bottom:24px}
+.abstract-copy{max-width:900px;margin:0 auto;font-size:17px;line-height:1.8;text-align:justify;color:#4a4a4a}
+.c3vd-comparison{position:relative;width:min(1280px,calc(100vw - 64px));margin-left:50%;transform:translateX(-50%)}
+.c3vd-comparison .gif-grid{column-gap:12px}
+@media(max-width:640px){.c3vd-comparison{width:100%;margin-left:0;transform:none}.abstract-copy{font-size:16px;text-align:left}#abstract h2{font-size:28px}}
+
+.quantitative-table{margin:0}.quantitative-table img{width:100%;height:auto}.quantitative-table a{display:block;cursor:zoom-in}
