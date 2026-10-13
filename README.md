@@ -10,14 +10,16 @@
 
 ## In-vivo Reconstruction
 
-<table bgcolor="#ffffff" style="background-color: #ffffff;">
-  <tr bgcolor="#ffffff" style="background-color: #ffffff;">
-    <th align="center" width="50%" bgcolor="#ffffff" style="background-color: #ffffff;">Segment 1</th>
-    <th align="center" width="50%" bgcolor="#ffffff" style="background-color: #ffffff;">Segment 2</th>
-  </tr>
-  <tr bgcolor="#ffffff" style="background-color: #ffffff;">
-    <td align="center" width="50%" bgcolor="#ffffff" style="background-color: #ffffff;"><img src="assets/invivo/segment_1.gif" width="100%" alt="Segment 1: Colon3R reconstruction, rotating without zoom"></td>
-    <td align="center" width="50%" bgcolor="#ffffff" style="background-color: #ffffff;"><img src="assets/invivo/segment_2.gif" width="100%" alt="Segment 2: Colon3R reconstruction, rotating without zoom"></td>
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <strong>Segment 1</strong><br><br>
+      <img src="assets/invivo/segment_1.gif" width="100%" alt="Segment 1: Colon3R reconstruction, rotating without zoom">
+    </td>
+    <td align="center" width="50%">
+      <strong>Segment 2</strong><br><br>
+      <img src="assets/invivo/segment_2.gif" width="100%" alt="Segment 2: Colon3R reconstruction, rotating without zoom">
+    </td>
   </tr>
 </table>
 
