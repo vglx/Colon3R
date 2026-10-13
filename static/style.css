@@ -33,8 +33,15 @@
 #abstract{border-top:0;padding-top:18px}
 #abstract h2{text-align:center;font-size:32px;color:#363636;margin-bottom:24px}
 .abstract-copy{max-width:900px;margin:0 auto;font-size:17px;line-height:1.8;text-align:justify;color:#4a4a4a}
-.c3vd-comparison{position:relative;width:min(1280px,calc(100vw - 64px));margin-left:50%;transform:translateX(-50%)}
+.c3vd-comparison{width:100%;margin-left:0;transform:none}
 .c3vd-comparison .gif-grid{column-gap:12px}
 @media(max-width:640px){.c3vd-comparison{width:100%;margin-left:0;transform:none}.abstract-copy{font-size:16px;text-align:left}#abstract h2{font-size:28px}}
 
 .quantitative-table{margin:0}.quantitative-table img{width:100%;height:auto}.quantitative-table a{display:block;cursor:zoom-in}
+
+#presentation-video{border-top:0;padding-top:10px;padding-bottom:38px}
+#presentation-video h2{text-align:center;font-size:28px;margin-bottom:22px}
+#presentation-video video{display:block;width:100%;max-width:960px;height:auto;margin:0 auto;background:#111;border-radius:4px}
+
+/* Match section dividers throughout the page. */
+#presentation-video, #abstract, #overview { border-top: 1px solid #dfe5e9; }
