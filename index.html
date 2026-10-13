@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Colon3R: cross-domain 3D reconstruction from monocular colonoscopic video using reliability-aware adaptation to unlabeled in-vivo data.">
+<title>Colon3R | Cross-Domain 3D Reconstruction</title>
+<link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<header class="hero">
+<h1><span>Colon3R</span>Cross-Domain 3D Reconstruction<br class="wide"> from Monocular Colonoscopic Video</h1>
+<a class="paper" href="https://arxiv.org/abs/2609.23961">Read the paper <span aria-hidden="true">?</span></a>
+<p class="authors">Zhihao Xing <span>?</span> Yingyu Wang <span>?</span> Liang Zhao <span>?</span> Shoudong Huang</p>
+<nav aria-label="Project links"><a href="https://github.com/vglx/Colon3R/tree/main">Code</a><a href="#overview">Overview</a><a href="#citation">Citation</a></nav>
+</header>
+<main>
+<section aria-labelledby="results-title">
+<div class="section-heading"><h2 id="results-title">In-vivo reconstruction</h2><p>Two segments. Continuous rotating views.</p></div>
+<div class="results">
+<figure><figcaption>Segment 1</figcaption><img src="static/segment_1.gif" width="752" height="539" alt="Rotating reconstruction of the lumen surface in in-vivo Segment 1"></figure>
+<figure><figcaption>Segment 2</figcaption><img src="static/segment_2.gif" width="752" height="539" alt="Rotating reconstruction of the lumen surface in in-vivo Segment 2"></figure>
+</div>
+<p class="caption">Qualitative reconstructions from monocular RGB sequences. No geometric ground truth is available for these in-vivo examples.</p>
+</section>
+<section id="overview" aria-labelledby="overview-title">
+<h2 id="overview-title">Overview</h2>
+<p class="lead">Colon3R adapts VGGT from labeled phantom and simulated data to unlabeled in-vivo colonoscopy. Hierarchical quasi-rigid reliability selects cross-view supervision at the sequence, directed-pair and pixel levels. Continued source supervision and constrained target updates preserve the coupled camera, depth and pointmap geometry during adaptation.</p>
+<figure class="pipeline"><a href="static/pipeline.png" aria-label="Open the full-resolution Colon3R pipeline"><img src="static/pipeline.png" width="2008" height="748" loading="lazy" alt="Colon3R pipeline showing the source geometry prior, teacher-student target adaptation, hierarchical reliability and source-preserving updates"></a><figcaption>Source-supervised geometry meets reliability-aware target adaptation.</figcaption></figure>
+</section>
+<section class="checkpoint" aria-labelledby="checkpoint-title"><h2 id="checkpoint-title">Checkpoint</h2><p><code>colon3r.pt</code> <span class="muted">Download link coming soon.</span></p></section>
+<section id="citation" aria-labelledby="citation-title"><h2 id="citation-title">Citation</h2><p>If you find this work useful, please cite:</p><pre><code>@misc{xing2026colon3rcrossdomain3dreconstruction,
+      title={Colon3R: Cross-Domain 3D Reconstruction from Monocular Colonoscopic Video},
+      author={Zhihao Xing and Yingyu Wang and Liang Zhao and Shoudong Huang},
+      year={2026},
+      eprint={2609.23961},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2609.23961},
+}</code></pre></section>
+</main>
+<footer><p>We thank the authors of <a href="https://github.com/facebookresearch/vggt">VGGT</a> for their open-source implementation.</p><p>Website code: <a href="LICENSE">MIT License</a>. Paper, figures and animations are excluded from this license.</p></footer>
+</body>
+</html>
